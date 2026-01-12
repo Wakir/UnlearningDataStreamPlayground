@@ -1,0 +1,14 @@
+numpy
+scipy
+scikit-learn
+numpydoc
+matplotlib
+setuptools
+sphinx
+sphinx_rtd_theme
+sphinx_gallery
+pillow
+tqdm
+sphinxcontrib-bibtex
+problexity>=0.5.1
+requests
