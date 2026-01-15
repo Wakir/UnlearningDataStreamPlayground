@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score
 from ..ensembles.base import StreamingEnsemble
 
 
-class SlidingWindowSEA(StreamingEnsemble):
+class SlidingWindowSEA2(StreamingEnsemble):
     """
     SEA with Sliding Window mechanism.
 

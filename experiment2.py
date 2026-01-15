@@ -9,8 +9,8 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 
-from strlearn.ensembles import SEA
-from strlearn2.ensembles import SlidingWindowSEA
+from strlearn2.classifiers import SlidingWindowClassifier
+from strlearn2.classifiers import UnlearningClassifier
 from strlearn.evaluators import TestThenTrain
 
 
@@ -84,15 +84,8 @@ stream = MNISTDriftStream(X, y, chunk_size)
 # 4. KLASYFIKATOR SEA + EWALUATOR
 # ============================================
 
-clf = SlidingWindowSEA(
-    base_estimator=SGDClassifier(loss="log_loss"),
-    n_estimators=100,
-)
-
-"""clf = SEA(
-    base_estimator=SGDClassifier(loss="log_loss"),
-    n_estimators=100,
-)"""
+clf = SlidingWindowClassifier(window_size=20)  # L z pseudokodu
+#clf = UnlearningClassifier(window_size=20)  # L z pseudokodu
 
 evaluator = TestThenTrain(metrics=(accuracy_score,))
 # ===== WARM-UP =====
@@ -102,6 +95,14 @@ clf.partial_fit(X0, y0, classes=stream.classes_)
 # ===== EVALUATION =====
 evaluator.process(stream, clf)
 
+#batch_times = np.array(clf.batch_times_)
+train_times = np.array(clf.train_times_)
+
+print("===== TIMING =====")
+#print(f"Mean batch time      : {batch_times.mean():.6f} s")
+#print(f"Std batch time       : {batch_times.std():.6f} s")
+print(f"Mean training time   : {train_times.mean():.6f} s")
+#print(f"Max batch time       : {batch_times.max():.6f} s")
 
 
 # ============================================
@@ -240,7 +241,7 @@ if T_recovery is not None:
 
 plt.xlabel("Chunk (evaluation axis)")
 plt.ylabel("Accuracy")
-plt.title(f"SEA_Window – Accuracy over time for MNIST + Foged C_MNIST (mean = {mean_accuracy:.3f})")
+plt.title(f"Unlearning_Classifier – Accuracy over time for MNIST + Foged C_MNIST (mean = {mean_accuracy:.3f})")
 plt.legend()
 plt.tight_layout()
 plt.show()

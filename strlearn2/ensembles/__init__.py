@@ -15,6 +15,7 @@ from .KUE import KUE
 from .ROSE import ROSE
 from .OALE import OALE
 from .SlidingWindowSEA import SlidingWindowSEA
+from .SlidingWindowSEA2 import SlidingWindowSEA2
 from .base import StreamingEnsemble
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "OALE",
     "ROSE",
     "SlidingWindowSEA",
+    "SlidingWindowSEA2",
     "StreamingEnsemble"
 ]
