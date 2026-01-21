@@ -11,11 +11,13 @@ class UnlearningClassifier(BaseEstimator, ClassifierMixin):
         window_size=5,
         base_estimator=None,
         random_state=42,
+        unlearning_rate = 0.1
     ):
         self.window_size = window_size
         self.random_state = random_state
         self.base_estimator = base_estimator
         self._is_initialized = False
+        self.unlearning_rate = unlearning_rate
         #self.buffer_ = deque(maxlen=self.window_size)
         self.unbuffer_ = deque(maxlen=self.window_size)
 
@@ -44,7 +46,8 @@ class UnlearningClassifier(BaseEstimator, ClassifierMixin):
         Approximate unlearning:
         ψ ← ψ − ∇L(DSk−L)
         """
-        neg_weights = -np.ones(len(y_old))
+        neg_weights = -np.ones(len(y_old)) * self.unlearning_rate
+        print(neg_weights)
         self.model_.partial_fit(X_old, y_old, sample_weight=neg_weights)
 
 
@@ -72,18 +75,15 @@ class UnlearningClassifier(BaseEstimator, ClassifierMixin):
                 self.model_.partial_fit(X, y)
 
         # ==================================================
-        # k ≥ L → RESET + trening od zera na oknie
+        # k ≥ L → Unlearning + trening na najnowszym
         # ==================================================
         else:
             # === 1. UNLEARN najstarszego chunka ===
             X_old, y_old = self.buffer_[0]
             self._unlearn_chunk(X_old, y_old)
 
-            # === 2. TRAIN na oknie (bez najstarszego) ===
-            Xw = np.vstack([c[0] for c in list(self.buffer_)[1:]])
-            yw = np.hstack([c[1] for c in list(self.buffer_)[1:]])
-
-            self.model_.partial_fit(Xw, yw)
+            # === 2. TRAIN na najnowszym chunku ===
+            self.model_.partial_fit(X, y)
 
         t_train_end = time.perf_counter()
         self.train_times_.append(t_train_end - t_train_start)

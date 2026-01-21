@@ -71,8 +71,8 @@ stream = MNISTDriftStream(X, y, chunk_size, drift_chunk)
 # 4. KLASYFIKATOR SEA + EWALUATOR
 # ============================================
 
-clf = SlidingWindowClassifier( window_size=5)  # L z pseudokodu
-#clf = UnlearningClassifier( window_size=5)  # L z pseudokodu
+#clf = SlidingWindowClassifier( window_size=5)  # L z pseudokodu
+clf = UnlearningClassifier( window_size=5)  # L z pseudokodu
 
 evaluator = TestThenTrain(metrics=(accuracy_score,))
 # ===== WARM-UP =====
