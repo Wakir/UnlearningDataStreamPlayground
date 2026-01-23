@@ -43,11 +43,18 @@ class SlidingWindowClassifier(BaseEstimator, ClassifierMixin):
             self.classes_ = classes
             self._init_model()
             self.train_times_ = []      # tylko uczenie
+            self.memory_usage_ = []
 
         t_train_start = time.perf_counter()
 
         # --- zapamiętaj chunk ---
         self.buffer_.append((X, y))
+        mem = sum(
+            c[0].nbytes + c[1].nbytes
+            for c in self.buffer_
+        )
+        self.memory_usage_.append(mem)
+
 
         # ==================================================
         # k < L  → inkrementalne uczenie

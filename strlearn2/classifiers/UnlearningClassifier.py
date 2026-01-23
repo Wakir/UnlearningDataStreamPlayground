@@ -53,16 +53,17 @@ class UnlearningClassifier(BaseEstimator, ClassifierMixin):
 
     def partial_fit(self, X, y, classes=None):
         if not hasattr(self, "buffer_"):
-            self.buffer_ = deque(maxlen=self.window_size)
+            self.buffer_ = deque(maxlen=1)
             self.k_ = 0                      # ← TU JEST KLUCZ
             self.classes_ = classes
             self._init_model()
             self._is_initialized = False
             self.train_times_ = []      # tylko uczenie
+            self.memory_usage_ = []
 
         t_train_start = time.perf_counter()
-        # --- zapamiętaj chunk ---
-        self.buffer_.append((X, y))
+
+
 
         # ==================================================
         # k < L  → inkrementalne uczenie
@@ -85,6 +86,14 @@ class UnlearningClassifier(BaseEstimator, ClassifierMixin):
             # === 2. TRAIN na najnowszym chunku ===
             self.model_.partial_fit(X, y)
 
+        # --- zapamiętaj chunk ---
+        self.buffer_.append((X, y))
+
+        mem = sum(
+            c[0].nbytes + c[1].nbytes
+            for c in self.buffer_
+        )
+        self.memory_usage_.append(mem)
         t_train_end = time.perf_counter()
         self.train_times_.append(t_train_end - t_train_start)
         self.k_ += 1
