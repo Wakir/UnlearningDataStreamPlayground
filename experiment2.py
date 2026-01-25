@@ -82,7 +82,7 @@ def make_balanced_chunks(X, y, chunk_size=500, seed=42):
 
     return X[ordered_indices], y[ordered_indices]
 
-def recovery_analysis(rolling_acc, drift_chunk, max_chunk, title):
+def recovery_analysis(accuracy, rolling_acc, drift_chunk, max_chunk, title):
     drift_chunk_eval = drift_chunk - 1
 
     # --- baseline na końcu dryftu ---
@@ -258,11 +258,11 @@ evaluator2 = TestThenTrain(metrics=(accuracy_score,))
 # ===== WARM-UP =====
 X0, y0 = stream.get_chunk()
 clf.partial_fit(X0, y0, classes=stream.classes_)
-clf2.partial_fit(X0, y0, classes=stream.classes_)
+#clf2.partial_fit(X0, y0, classes=stream.classes_)
 
 # ===== EVALUATION =====
-evaluator.process(stream, clf)
 evaluator2.process(stream2, clf2)
+evaluator.process(stream, clf)
 
 #batch_times = np.array(clf.batch_times_)
 train_times = np.array(clf.train_times_)
@@ -350,8 +350,8 @@ drift_chunk_eval = drift_chunk - 1
 
 max_chunk = len(X) // chunk_size
 
-recovery_time1 = recovery_analysis(rolling_acc, drift_chunk, max_chunk, "Sliding_Window")
-recovery_time2 = recovery_analysis(rolling_acc2, drift_chunk, max_chunk, "Unlearning_Classifier")
+recovery_time1 = recovery_analysis(accuracy, rolling_acc, drift_chunk, max_chunk, "Sliding_Window")
+recovery_time2 = recovery_analysis(accuracy2, rolling_acc2, drift_chunk, max_chunk, "Unlearning_Classifier")
 
 recovery_efficiency = (recovery_time1- recovery_time2) / recovery_time1*100
 
