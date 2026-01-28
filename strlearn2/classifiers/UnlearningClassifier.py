@@ -11,7 +11,7 @@ class UnlearningClassifier(BaseEstimator, ClassifierMixin):
         window_size=5,
         base_estimator=None,
         random_state=42,
-        unlearning_rate = 0.1
+        unlearning_rate = 0.2
     ):
         self.window_size = window_size
         self.random_state = random_state

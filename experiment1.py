@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 
 from strlearn.ensembles import SEA
 from strlearn2.classifiers import SlidingWindowClassifier
+from strlearn2.classifiers import SlidingWindowPerceptron
+from strlearn2.classifiers import FisherUnlearningClassifier
 from strlearn2.classifiers import UnlearningClassifier
 from strlearn.evaluators import TestThenTrain
 
@@ -51,6 +53,81 @@ class MNISTDriftStream:
 
     def is_dry(self):
         return self.chunk_id >= self.n_chunks - 1
+    
+def make_balanced_chunks(X, y, chunk_size=500, seed=42):
+    rng = np.random.default_rng(seed)
+
+    classes = np.unique(y)
+    n_classes = len(classes)
+
+    assert chunk_size % n_classes == 0, "chunk_size musi być podzielny przez liczbę klas"
+
+    samples_per_class = chunk_size // n_classes
+
+    # indeksy próbek dla każdej klasy (potasowane)
+    class_indices = {
+        c: rng.permutation(np.where(y == c)[0])
+        for c in classes
+    }
+
+    # liczba pełnych chunków
+    max_chunks = min(
+        len(class_indices[c]) // samples_per_class
+        for c in classes
+    )
+
+    ordered_indices = []
+
+    for i in range(max_chunks):
+        for c in classes:
+            start = i * samples_per_class
+            end = start + samples_per_class
+            ordered_indices.extend(class_indices[c][start:end])
+
+    # dodatkowe mieszanie wewnątrz każdego chunka
+    ordered_indices = np.array(ordered_indices)
+
+    for i in range(0, len(ordered_indices), chunk_size):
+        block = ordered_indices[i:i+chunk_size]
+        ordered_indices[i:i+chunk_size] = rng.permutation(block)
+
+    return X[ordered_indices], y[ordered_indices]
+
+def recovery_analysis(accuracy, rolling_acc, drift_chunk, max_chunk):
+    drift_chunk_eval = drift_chunk - 1
+
+    baseline = rolling_acc[max_chunk - 6 : max_chunk - 1].mean()
+
+    min_val = min(accuracy[drift_chunk_eval:])
+    max_val = max(accuracy[drift_chunk_eval:])
+    theta = 0.90 * max_val
+
+    # DROP
+    T_drop = None
+    for i in range(drift_chunk_eval, len(accuracy)):
+        if accuracy[i] < 1.1 * min_val:
+            T_drop = i
+            break
+
+    # RECOVERY
+    T_recovery = None
+    if T_drop is not None:
+        for i in range(T_drop + 1, len(accuracy)):
+            if accuracy[i] >= theta:
+                T_recovery = i
+                break
+
+    results = {
+        "theta": theta,
+        "T_drop": T_drop,
+        "T_recovery": T_recovery,
+        "recovery_time": None
+    }
+
+    if T_drop is not None and T_recovery is not None:
+        results["recovery_time"] = T_recovery - T_drop
+
+    return results
 
 
 # ============================================
@@ -64,40 +141,86 @@ y = y.astype(int).to_numpy()
 chunk_size = 500
 drift_chunk = 40   # 40 * 500 = 20 000 próbek
 
+X, y = make_balanced_chunks(X, y, chunk_size)
+
 stream = MNISTDriftStream(X, y, chunk_size, drift_chunk)
+stream2 = MNISTDriftStream(X, y, chunk_size, drift_chunk)
 
 
 # ============================================
 # 4. KLASYFIKATOR SEA + EWALUATOR
 # ============================================
 
-#clf = SlidingWindowClassifier( window_size=5)  # L z pseudokodu
-clf = UnlearningClassifier( window_size=5)  # L z pseudokodu
+#clf = SlidingWindowClassifier(window_size=5)  # L z pseudokodu
+clf = SlidingWindowPerceptron(window_size=5) 
+#clf2 = UnlearningClassifier(window_size=5)  # L z pseudokodu
+clf2 = FisherUnlearningClassifier(window_size=5)
 
 evaluator = TestThenTrain(metrics=(accuracy_score,))
+evaluator2 = TestThenTrain(metrics=(accuracy_score,))
 # ===== WARM-UP =====
-X0, y0 = stream.get_chunk()
-clf.partial_fit(X0, y0, classes=stream.classes_)
+#X0, y0 = stream.get_chunk()
+#clf.partial_fit(X0, y0, classes=stream.classes_)
+#X0, y0 = stream2.get_chunk()
+#clf2.partial_fit(X0, y0, classes=stream2.classes_)
 
 # ===== EVALUATION =====
+evaluator2.process(stream2, clf2)
 evaluator.process(stream, clf)
-
 
 #batch_times = np.array(clf.batch_times_)
 train_times = np.array(clf.train_times_)
+train_times2 = np.array(clf2.train_times_)
 
-print("===== TIMING =====")
+print("===== TIMING SLIDING WINDOW =====")
 #print(f"Mean batch time      : {batch_times.mean():.6f} s")
 #print(f"Std batch time       : {batch_times.std():.6f} s")
 print(f"Mean training time   : {train_times.mean():.6f} s")
 #print(f"Max batch time       : {batch_times.max():.6f} s")
 
+print("===== TIMING UNLEARNING =====")
+#print(f"Mean batch time      : {batch_times.mean():.6f} s")
+#print(f"Std batch time       : {batch_times.std():.6f} s")
+print(f"Mean training time   : {train_times2.mean():.6f} s")
+#print(f"Max batch time       : {batch_times.max():.6f} s")
+
+time_efficiency = (train_times.mean() - train_times2.mean()) / train_times.mean()*100
+
+print("===== TIMING EFFICIENCY =====")
+print(f"Time gain   : {time_efficiency:.4f} %")
 
 # ============================================
-# 5. ACCURACY PER CHUNK
+# 5. MEMORY
+# ============================================
+
+memory = np.array(clf.memory_usage_)
+memory2 = np.array(clf2.memory_usage_)
+
+print("===== MEMORY USAGE SLIDING WINDOW =====")
+#print(f"Mean batch time      : {batch_times.mean():.6f} s")
+#print(f"Std batch time       : {batch_times.std():.6f} s")
+print(f"Mean memory usage  : {memory.mean():.6f} s")
+#print(f"Max batch time       : {batch_times.max():.6f} s")
+
+print("===== TIMING UNLEARNING =====")
+#print(f"Mean batch time      : {batch_times.mean():.6f} s")
+#print(f"Std batch time       : {batch_times.std():.6f} s")
+print(f"Mean memory usage  : {memory2.mean():.6f} s")
+#print(f"Max batch time       : {batch_times.max():.6f} s")
+
+memory_efficiency = (memory.mean() - memory2.mean()) / memory.mean()*100
+
+print("===== TIMING EFFICIENCY =====")
+print(f"Memory gain   : {memory_efficiency:.4f} %")
+
+
+
+# ============================================
+# 6. ACCURACY PER CHUNK
 # ============================================
 
 accuracy = evaluator.scores[0, :, 0]
+accuracy2 = evaluator2.scores[0, :, 0]
 
 rolling_acc = (
     pd.Series(accuracy)
@@ -106,134 +229,113 @@ rolling_acc = (
     .values
 )
 
-mean_accuracy = np.nanmean(accuracy)
+rolling_acc2 = (
+    pd.Series(accuracy2)
+    .rolling(window=5, min_periods=1)
+    .mean()
+    .values
+)
 
-print("===== BASIC RESULTS =====")
+mean_accuracy = np.nanmean(accuracy)
+mean_accuracy2 = np.nanmean(accuracy2)
+
+print("===== BASIC RESULTS SLIDING WINDOW=====")
 print(f"Mean accuracy: {mean_accuracy:.4f}")
 
+print("===== BASIC RESULTS UNLEARNING=====")
+print(f"Mean accuracy: {mean_accuracy2:.4f}")
+
 # ============================================
-# 6. RECOVERY ANALYSIS
+# 7. RECOVERY ANALYSIS
 # ============================================
 
 # indeks driftu w osi ewaluacji
 drift_chunk_eval = drift_chunk - 1
 
-# --- baseline przed driftem ---
-baseline = rolling_acc[
-    drift_chunk_eval - 5 : drift_chunk_eval
-].mean()
-theta = 0.9 * baseline  # próg recovery (90% baseline)
+max_chunk = len(X) // chunk_size
 
-# === DROP ===
-T_drop = None
-for i in range(drift_chunk_eval, len(rolling_acc)):
-    if rolling_acc[i] < theta:
-        T_drop = i
-        break
-
-# === RECOVERY ===
-T_recovery = None
-if T_drop is not None:
-    for i in range(T_drop + 1, len(rolling_acc)):
-        if rolling_acc[i] >= theta:
-            T_recovery = i
-            break
-
-if T_recovery is not None:
-    # --- metryki recovery ---
-    recovery_time = T_recovery - T_drop
-    recovery_depth = baseline - rolling_acc[T_drop]
-    recovery_quality = (
-        rolling_acc[T_recovery:T_recovery + 5].mean() / baseline
-    )
-
-    aurc = np.trapz(
-        rolling_acc[T_drop:T_recovery],
-        dx=1
-    )
-
-
-    # ============================================
-    # 7. RAPORT
-    # ============================================
-
-    print("===== RECOVERY ANALYSIS =====")
-    print(f"Baseline accuracy      : {baseline:.3f}")
-    print(f"Recovery threshold     : {theta:.3f}")
-    print(f"T_drop (chunk)         : {T_drop}")
-    print(f"T_recovery (chunk)     : {T_recovery}")
-    print(f"Recovery time (chunks) : {recovery_time}")
-    print(f"Recovery depth         : {recovery_depth:.3f}")
-    print(f"Recovery quality       : {recovery_quality:.3f}")
-    print(f"AURC                   : {aurc:.3f}")
-else:
-    print("===== RECOVERY ANALYSIS =====")
-    print("No significant dropout detected.")
-
-
-# ============================================
-# 8. WYKRES RECOVERY
-# ============================================
+res1 = recovery_analysis(accuracy, rolling_acc, drift_chunk, max_chunk)
+res2 = recovery_analysis(accuracy2, rolling_acc2, drift_chunk, max_chunk)
 
 import matplotlib.pyplot as plt
+import numpy as np
 
-plt.figure(figsize=(10, 5))
+plt.figure(figsize=(12, 6))
 
-# --- accuracy ---
+# --- Sliding Window ---
 plt.plot(
     accuracy,
-    alpha=0.35,
-    label="Accuracy per chunk"
+    label="Sliding Window",
+    linewidth=2
 )
 
+# --- Unlearning ---
 plt.plot(
-    rolling_acc,
-    linewidth=2,
-    label="Rolling accuracy"
+    accuracy2,
+    label="Unlearning Classifier",
+    linewidth=2
 )
 
-# --- drift ---
+# --- Drift ---
 plt.axvline(
-    drift_chunk_eval,
-    color="orange",
+    drift_chunk - 1,
     linestyle="--",
     label="Drift"
 )
 
-# --- próg recovery ---
+# --- Progi recovery ---
 plt.axhline(
-    theta,
-    color="red",
+    res1["theta"],
     linestyle="--",
-    alpha=0.7,
-    label="Recovery threshold"
+    alpha=0.6,
+    label="Recovery threshold (SW)"
 )
 
-# --- drop ---
-if T_drop is not None:
-    plt.axvline(
-        T_drop,
-        color="black",
-        linestyle=":",
-        label="Performance drop"
-    )
+plt.axhline(
+    res2["theta"],
+    linestyle="--",
+    alpha=0.6,
+    label="Recovery threshold (Unlearning)"
+)
 
-# --- recovery ---
-if T_recovery is not None:
-    plt.axvline(
-        T_recovery,
-        color="green",
-        linestyle=":",
-        label=f"Recovery (Δ={T_recovery - T_drop} chunks)"
-    )
+# --- Drop & recovery ---
+for res, color, name in [
+    (res1, "black", "SW"),
+    (res2, "green", "Unlearning")
+]:
+    if res["T_drop"] is not None:
+        plt.axvline(
+            res["T_drop"],
+            linestyle=":",
+            color=color,
+            alpha=0.8,
+            label=f"{name} drop"
+        )
+    if res["T_recovery"] is not None:
+        plt.axvline(
+            res["T_recovery"],
+            linestyle="-.",
+            color=color,
+            alpha=0.8,
+            label=f"{name} recovery"
+        )
 
-plt.xlabel("Chunk (evaluation axis)")
-plt.ylabel("Accuracy")
-plt.title(f"Unlearning Classifier - Accuracy over time for MNIST 0-9 + 5-9 (mean = {mean_accuracy:.3f})")
+plt.xlabel("Chunk")
+plt.ylabel("Rolling accuracy")
+plt.title("Accuracy over time for MNIST 0-9 + 5-9")
 plt.legend()
 plt.tight_layout()
 plt.show()
 
+
+recovery_efficiency = (
+    (res1["recovery_time"] - res2["recovery_time"])
+    / res1["recovery_time"]
+    * 100
+)
+
+print("===== RECOVERY EFFICIENCY =====")
+print(f"Recovery gain: {recovery_efficiency:.2f} %")
 
 
 
