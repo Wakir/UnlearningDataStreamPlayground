@@ -179,9 +179,10 @@ clf2 = FisherUnlearningClassifier(window_size=20)
 evaluator = TestThenTrain(metrics=(accuracy_score,))
 evaluator2 = TestThenTrain(metrics=(accuracy_score,))
 # ===== WARM-UP =====
-#X0, y0 = stream.get_chunk()
-#clf.partial_fit(X0, y0, classes=stream.classes_)
-#clf2.partial_fit(X0, y0, classes=stream.classes_)
+X0, y0 = stream.get_chunk()
+clf.partial_fit(X0, y0, classes=stream.classes_)
+X0, y0 = stream2.get_chunk()
+clf2.partial_fit(X0, y0, classes=stream2.classes_)
 
 # ===== EVALUATION =====
 evaluator2.process(stream2, clf2)
@@ -354,6 +355,8 @@ recovery_efficiency = (
 )
 
 print("===== RECOVERY EFFICIENCY =====")
+print(res1)
+print(res2)
 print(f"Recovery gain: {recovery_efficiency:.2f} %")
 
 

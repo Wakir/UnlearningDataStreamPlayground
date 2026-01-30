@@ -75,6 +75,7 @@ class SlidingWindowClassifier(BaseEstimator, ClassifierMixin):
             Xw = np.vstack([c[0] for c in self.buffer_])
             yw = np.hstack([c[1] for c in self.buffer_])
 
+            print(len(yw))
             self.model_.partial_fit(Xw, yw, classes=self.classes_)
             self._is_initialized = True
 
