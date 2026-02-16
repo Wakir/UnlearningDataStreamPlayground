@@ -22,7 +22,8 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
     def _init_model(self):
         self.model = MLPClassifier(
             hidden_layer_sizes=(100,),
-            max_iter=1,
+            learning_rate_init = 0.001,
+            max_iter=200,
             solver="adam",
             warm_start=False,
             random_state=42
@@ -68,9 +69,7 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
             Xw = np.vstack([c[0] for c in self.buffer_])
             yw = np.hstack([c[1] for c in self.buffer_])
 
-            print(len(yw))
-
-            self.model.partial_fit(Xw, yw, classes=self.classes_)
+            self.model.fit(Xw, yw)
             self._is_initialized = True
 
         t_train_end = time.perf_counter()

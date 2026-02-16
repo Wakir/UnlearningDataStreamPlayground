@@ -35,7 +35,7 @@ class FisherUnlearningClassifier(BaseEstimator, ClassifierMixin):
         self.model = MLPClassifier(
             hidden_layer_sizes=(100,),
             solver="adam",
-            max_iter=1,
+            max_iter=200,
             warm_start=False,
             random_state=42
         )
@@ -83,6 +83,7 @@ class FisherUnlearningClassifier(BaseEstimator, ClassifierMixin):
 
         # --- UNLEARNING (opóźniony start!) ---
         if self.k_ >= self.window_size:
+            self.model.partial_fit(X, y, classes=self.classes_)
             delta_old_W, delta_old_b = self.buffer_.popleft()
 
             alpha = self.unlearning_rate
