@@ -139,7 +139,7 @@ class DataStream:
         else:
             X_chunk = self._add_noise(
                 X_chunk,
-                self.noise_percent + self.delta_noise
+                self.delta_noise
             )
 
         # Update internal state (CRUCIAL)
@@ -365,7 +365,7 @@ param_grid = [
         window_sizes,
         random_seeds
     )
-    if noise_percent != new_noises
+    if noise_percent != delta_noise
 ]
 
 print(f"Liczba uruchamianych eksperymentów: {len(param_grid)}")
