@@ -50,18 +50,13 @@ class ResNetClassifier(nn.Module):
 
 
 # ======================================================
-# GPU-ACCELERATED Sliding Window Perceptron
-# (Test-Then-Train SAFE)
+# Sliding Window ResNet (uniwersalny)
 # ======================================================
 class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
-    def __init__(self, window_size=5, lr=1e-3, epochs=10, device=None):
+    def __init__(self, window_size=5, lr=1e-3, epochs=10):
         self.window_size = window_size
         self.lr = lr
         self.epochs = epochs
-
-        self.device = device or torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
 
         self.classes_ = np.arange(10)
         self._is_initialized = False
@@ -70,7 +65,7 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
         self.memory_usage_ = []
 
     # --------------------------------------------------
-    # Data preparation
+    # Uniwersalne przygotowanie danych
     # --------------------------------------------------
     def _prepare_X(self, X):
         X = np.asarray(X)
@@ -79,42 +74,42 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
         return X
 
     # --------------------------------------------------
-    # Model initialization / reset
+    # Inicjalizacja / reset modelu
     # --------------------------------------------------
     def _init_model(self, input_dim):
         self.model = ResNetClassifier(
             input_dim=input_dim,
             num_classes=len(self.classes_)
-        ).to(self.device)
-
+        )
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
-
         self._is_initialized = True
         self.input_dim_ = input_dim
 
     # --------------------------------------------------
-    # Train on ONE chunk (GPU)
+    # Trening jednego chunka
     # --------------------------------------------------
     def _train(self, X, y):
         X = self._prepare_X(X)
 
+        # jeśli zmienił się wymiar cech → reset
         if self._is_initialized and X.shape[1] != self.input_dim_:
+            print("RESET")
             self._init_model(X.shape[1])
 
-        X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
-        y = torch.as_tensor(y, dtype=torch.long, device=self.device)
+        X = torch.tensor(X, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.long)
 
         self.model.train()
         for _ in range(self.epochs):
-            self.optimizer.zero_grad(set_to_none=True)
+            self.optimizer.zero_grad()
             logits = self.model(X)
             loss = self.criterion(logits, y)
             loss.backward()
             self.optimizer.step()
 
     # --------------------------------------------------
-    # partial_fit (Test-Then-Train preserved)
+    # partial_fit (sliding window)
     # --------------------------------------------------
     def partial_fit(self, X, y, classes=None):
         if not hasattr(self, "buffer_"):
@@ -126,6 +121,7 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
         t_start = time.perf_counter()
 
         self.buffer_.append((X, y))
+
         mem = sum(c[0].nbytes + c[1].nbytes for c in self.buffer_)
         self.memory_usage_.append(mem)
 
@@ -134,15 +130,15 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
         if not self._is_initialized:
             self._init_model(Xp.shape[1])
 
-        # ==============================================
-        # k < L → incremental update
-        # ==============================================
+        # ==================================================
+        # k < L → inkrementalnie
+        # ==================================================
         if self.k_ < self.window_size:
             self._train(X, y)
 
-        # ==============================================
-        # k ≥ L → RESET + retrain on window
-        # ==============================================
+        # ==================================================
+        # k ≥ L → RESET + trening od zera na oknie
+        # ==================================================
         else:
             Xw = np.vstack([self._prepare_X(c[0]) for c in self.buffer_])
             yw = np.hstack([c[1] for c in self.buffer_])
@@ -157,7 +153,7 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
         return self
 
     # --------------------------------------------------
-    # Prediction (GPU → CPU)
+    # Predykcja
     # --------------------------------------------------
     def predict(self, X):
         if not self._is_initialized:
@@ -165,12 +161,13 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
 
         X = self._prepare_X(X)
 
+        # zabezpieczenie
         if X.shape[1] != self.input_dim_:
             raise ValueError(
                 f"Niezgodny wymiar cech: {X.shape[1]} ≠ {self.input_dim_}"
             )
 
-        X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
+        X = torch.tensor(X, dtype=torch.float32)
 
         self.model.eval()
         with torch.no_grad():
