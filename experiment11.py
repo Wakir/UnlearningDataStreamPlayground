@@ -249,13 +249,13 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
 
     evaluator.process(stream, clf)
 
-    scores = evaluator.scores[0, :, :]  # (metrics, time)
+    scores = evaluator.scores[0]  # (metrics, time)
     train_times = np.array(clf.train_times_)
     memory = np.array(clf.memory_usage_)
 
     return {
         "metric_curves": {
-            name: scores[i]
+            name: scores[:, i]   
             for i, name in enumerate(metrics.keys())
         },
         "drift_chunk": stream.noise_change_chunk,
