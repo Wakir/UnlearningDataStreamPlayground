@@ -333,7 +333,7 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
 
 chunk_sizes = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
 noise_percents = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
-delta_noises = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
+new_noises = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
 window_sizes = [20, 40, 60, 80, 100]
 random_seeds = [42, 65, 88]
 
@@ -361,11 +361,11 @@ param_grid = [
     in itertools.product(
         chunk_sizes,
         noise_percents,
-        delta_noises,
+        new_noises,
         window_sizes,
         random_seeds
     )
-    if noise_percent + delta_noise <= 1.0
+    if noise_percent != new_noises
 ]
 
 print(f"Liczba uruchamianych eksperymentów: {len(param_grid)}")
