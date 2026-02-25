@@ -63,6 +63,9 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
 
         self.train_times_ = []
         self.memory_usage_ = []
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
 
     # --------------------------------------------------
     # Uniwersalne przygotowanie danych
@@ -80,7 +83,7 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
         self.model = ResNetClassifier(
             input_dim=input_dim,
             num_classes=len(self.classes_)
-        )
+        ).to(self.device)
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
         self._is_initialized = True
@@ -97,9 +100,8 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
             print("RESET")
             self._init_model(X.shape[1])
 
-        X = torch.tensor(X, dtype=torch.float32)
-        y = torch.tensor(y, dtype=torch.long)
-
+        X = torch.from_numpy(X).float().to(self.device)
+        y = torch.from_numpy(y).long().to(self.device)
         self.model.train()
         for _ in range(self.epochs):
             self.optimizer.zero_grad()
@@ -107,6 +109,8 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
             loss = self.criterion(logits, y)
             loss.backward()
             self.optimizer.step()
+    def _reset_optimizer(self):
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
     # --------------------------------------------------
     # partial_fit (sliding window)
@@ -167,7 +171,7 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
                 f"Niezgodny wymiar cech: {X.shape[1]} ≠ {self.input_dim_}"
             )
 
-        X = torch.tensor(X, dtype=torch.float32)
+        X = torch.from_numpy(X).float().to(self.device)
 
         self.model.eval()
         with torch.no_grad():
