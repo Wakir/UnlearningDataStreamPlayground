@@ -275,6 +275,7 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             "noise_percent": noise_percent,
             "delta_noise": delta_noise,
             "window_size": window_size,
+            "unlearning_rate": ulrealing_rate,
             "random_seed": random_seed
         })
 
@@ -364,8 +365,8 @@ import itertools
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
 param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, random_seed)
-    for chunk_size, noise_percent, delta_noise, window_size, random_seed
+    (chunk_size, noise_percent, delta_noise, window_size, ulrealing_rates, random_seed)
+    for chunk_size, noise_percent, delta_noise, window_size, ulrealing_rates, random_seed
     in itertools.product(
         chunk_sizes,
         noise_percents,
