@@ -13,6 +13,7 @@ from strlearn.ensembles import SEA
 from strlearn2.classifiers import SlidingWindowClassifier
 from strlearn2.classifiers import SlidingWindowPerceptron
 from strlearn2.classifiers import FisherUnlearningClassifier
+from strlearn2.classifiers import NewMLPClassifier
 from strlearn2.classifiers import UnlearningClassifier
 from strlearn.evaluators import TestThenTrain
 
@@ -154,7 +155,8 @@ stream2 = MNISTDriftStream(X, y, chunk_size, drift_chunk)
 #clf = SlidingWindowClassifier(window_size=5)  # L z pseudokodu
 clf = SlidingWindowPerceptron(window_size=5) 
 #clf2 = UnlearningClassifier(window_size=5)  # L z pseudokodu
-clf2 = FisherUnlearningClassifier(window_size=5)
+#clf2 = FisherUnlearningClassifier(window_size=5)
+clf2 = NewMLPClassifier(window_size=5)
 
 evaluator = TestThenTrain(metrics=(accuracy_score,))
 evaluator2 = TestThenTrain(metrics=(accuracy_score,))
@@ -240,7 +242,7 @@ mean_accuracy = np.nanmean(accuracy)
 mean_accuracy2 = np.nanmean(accuracy2)
 
 print("===== BASIC RESULTS SLIDING WINDOW=====")
-print(f"Mean accuracy: {mean_accuracy:.4f}")
+#print(f"Mean accuracy: {mean_accuracy:.4f}")
 
 print("===== BASIC RESULTS UNLEARNING=====")
 print(f"Mean accuracy: {mean_accuracy2:.4f}")
@@ -300,7 +302,7 @@ plt.axhline(
 
 # --- Drop & recovery ---
 for res, color, name in [
-    (res1, "black", "SW"),
+    #(res1, "black", "SW"),
     (res2, "green", "Unlearning")
 ]:
     if res["T_drop"] is not None:
@@ -334,7 +336,7 @@ recovery_efficiency = (
 )
 
 print("===== RECOVERY EFFICIENCY =====")
-print(res1)
+#print(res1)
 print(res2)
 print(f"Recovery gain: {recovery_efficiency:.2f} %")
 

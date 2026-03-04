@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 
 from strlearn2.classifiers import FisherUnlearningClassifier
-from strlearn2.classifiers import SlidingWindowClassifier
+from strlearn2.classifiers import SlidingWindowClassifier, NewMLPClassifier
 from strlearn2.classifiers import SlidingWindowPerceptron
 from strlearn2.classifiers import UnlearningClassifier
 from strlearn.evaluators import TestThenTrain
@@ -174,7 +174,8 @@ stream2 = MNISTDriftStream(X, y, chunk_size)
 #clf = SlidingWindowClassifier(window_size=20)  # L z pseudokodu
 clf = SlidingWindowPerceptron(window_size=20) 
 #clf2 = UnlearningClassifier(window_size=20)  # L z pseudokodu
-clf2 = FisherUnlearningClassifier(window_size=20)
+#clf2 = FisherUnlearningClassifier(window_size=20)
+clf2 = NewMLPClassifier(window_size=20)
 
 evaluator = TestThenTrain(metrics=(accuracy_score,))
 evaluator2 = TestThenTrain(metrics=(accuracy_score,))

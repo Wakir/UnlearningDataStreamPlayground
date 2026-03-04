@@ -337,13 +337,9 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
 chunk_sizes = [100]
 noise_percents = [0.0,0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 new_noises = [0.0, 0.1,  0.2,  0.3,  0.4, 0.5,  0.6, 0.7,  0.8,  0.9, 1.0]
-window_sizes = [20, 40, 60, 80, 100]
+window_sizes = [20]
 random_seeds = [42, 65, 88]
-ulrealing_rates = [0.05]
-
-import mlflow
-
-mlflow.set_tracking_uri("file:///C:/Users/maciek/Documents/GitHub/UnlearningDataStreamPlayground/mlruns")
+ulrealing_rates = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 
 from functools import partial
 
@@ -360,7 +356,9 @@ metrics = {
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns")
 
-mlflow.set_experiment("MNIST_SuddenDrift_WindowSize_Unlearning")
+mlflow.set_tracking_uri("file:///C:/Users/maciek/Documents/GitHub/UnlearningDataStreamPlayground/mlruns")
+
+mlflow.set_experiment("MNIST_SuddenDrift_UnlearningRate_Unlearning")
 
 from joblib import Parallel, delayed
 import itertools

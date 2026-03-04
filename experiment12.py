@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
-import os
 from tensorflow.keras.datasets import mnist, cifar10
 from strlearn.evaluators import TestThenTrain
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score,  balanced_accuracy_score as bac, precision_score, recall_score
 from specificity import specificity, specificity_macro
-from strlearn2.classifiers import SlidingWindowPerceptron, FisherUnlearningAdam
+from strlearn2.classifiers import SlidingWindowPerceptron
 from collections import defaultdict
 
 
@@ -233,7 +232,7 @@ class DataStream:
         return self.chunk_id >= self.n_chunks - 1
     
 
-def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_seed, ulr, metrics):
+def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_seed, metrics):
     stream = DataStream(
         chunk_size=chunk_size,
         dataset_name="MNIST",
@@ -242,7 +241,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
         random_seed=random_seed,
     )
 
-    clf = FisherUnlearningAdam(window_size=window_size, unlearning_rate = ulr)
+    clf = SlidingWindowPerceptron(window_size=window_size)
     evaluator = TestThenTrain(metrics=list(metrics.values()))
 
     X0, y0 = next(iter(stream))
@@ -267,7 +266,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
 
 import mlflow
 
-def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, ulrealing_rate, metrics):
+def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, metrics):
     with mlflow.start_run(nested=True):
 
         mlflow.log_params({
@@ -275,7 +274,6 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             "noise_percent": noise_percent,
             "delta_noise": delta_noise,
             "window_size": window_size,
-            "unlearning_rate": ulrealing_rate,
             "random_seed": random_seed
         })
 
@@ -285,7 +283,6 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             delta_noise,
             window_size,
             random_seed,
-            ulrealing_rate,
             metrics
         )
 
@@ -334,16 +331,11 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
 
 # HIPERPARAMETRY
 
-chunk_sizes = [100]
+chunk_sizes = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
 noise_percents = [0.0,0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 new_noises = [0.0, 0.1,  0.2,  0.3,  0.4, 0.5,  0.6, 0.7,  0.8,  0.9, 1.0]
-window_sizes = [20, 40, 60, 80, 100]
+window_sizes = [20]
 random_seeds = [42, 65, 88]
-ulrealing_rates = [0.05]
-
-import mlflow
-
-mlflow.set_tracking_uri("file:///C:/Users/maciek/Documents/GitHub/UnlearningDataStreamPlayground/mlruns")
 
 from functools import partial
 
@@ -357,24 +349,20 @@ metrics = {
     "specificity_macro": specificity_macro
 }
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns")
-
-mlflow.set_experiment("MNIST_SuddenDrift_WindowSize_Unlearning")
+mlflow.set_experiment("MNIST_SuddenDrift_WindowSize_Sliding")
 
 from joblib import Parallel, delayed
 import itertools
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
 param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, ulrealing_rates, random_seed)
-    for chunk_size, noise_percent, delta_noise, window_size, ulrealing_rates, random_seed
+    (chunk_size, noise_percent, delta_noise, window_size, random_seed)
+    for chunk_size, noise_percent, delta_noise, window_size, random_seed
     in itertools.product(
         chunk_sizes,
         noise_percents,
         new_noises,
         window_sizes,
-        ulrealing_rates,
         random_seeds
     )
     if noise_percent != delta_noise
@@ -389,10 +377,9 @@ results = Parallel(n_jobs=-1, verbose=10)(
         delta_noise,
         window_size,
         random_seed,
-        ulrealing_rate,
         metrics
     )
-    for chunk_size, noise_percent, delta_noise, window_size, ulrealing_rate, random_seed in param_grid
+    for chunk_size, noise_percent, delta_noise, window_size, random_seed in param_grid
 )
 
 df = pd.DataFrame(results)

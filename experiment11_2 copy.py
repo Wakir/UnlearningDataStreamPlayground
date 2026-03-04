@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import os
 from tensorflow.keras.datasets import mnist, cifar10
 from strlearn.evaluators import TestThenTrain
 from sklearn.metrics import accuracy_score
@@ -242,7 +241,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
         random_seed=random_seed,
     )
 
-    clf = FisherUnlearningAdam(window_size=window_size, unlearning_rate = ulr)
+    clf = DeltaGradPerceptron(window_size=window_size, unlearning_rate = ulr)
     evaluator = TestThenTrain(metrics=list(metrics.values()))
 
     X0, y0 = next(iter(stream))
@@ -268,14 +267,13 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
 import mlflow
 
 def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, ulrealing_rate, metrics):
-    with mlflow.start_run(nested=True):
+    with mlflow.start_run():
 
         mlflow.log_params({
             "chunk_size": chunk_size,
             "noise_percent": noise_percent,
             "delta_noise": delta_noise,
             "window_size": window_size,
-            "unlearning_rate": ulrealing_rate,
             "random_seed": random_seed
         })
 
@@ -334,16 +332,14 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
 
 # HIPERPARAMETRY
 
-chunk_sizes = [100]
-noise_percents = [0.0,0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-new_noises = [0.0, 0.1,  0.2,  0.3,  0.4, 0.5,  0.6, 0.7,  0.8,  0.9, 1.0]
-window_sizes = [20, 40, 60, 80, 100]
-random_seeds = [42, 65, 88]
-ulrealing_rates = [0.05]
+# HIPERPARAMETRY
 
-import mlflow
-
-mlflow.set_tracking_uri("file:///C:/Users/maciek/Documents/GitHub/UnlearningDataStreamPlayground/mlruns")
+chunk_size = 50
+noise_percent = 0.0
+new_noise = 0.05
+window_size = 20
+ulr = 1e-3*0.01
+random_seed = 42
 
 from functools import partial
 
@@ -357,52 +353,60 @@ metrics = {
     "specificity_macro": specificity_macro
 }
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns")
-
-mlflow.set_experiment("MNIST_SuddenDrift_WindowSize_Unlearning")
+#mlflow.set_experiment("MNIST_SuddenDrift")
 
 from joblib import Parallel, delayed
 import itertools
 
-# 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
+"""# 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
 param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, ulrealing_rates, random_seed)
-    for chunk_size, noise_percent, delta_noise, window_size, ulrealing_rates, random_seed
+    (chunk_size, noise_percent, delta_noise, window_size, random_seed)
+    for chunk_size, noise_percent, delta_noise, window_size, random_seed
     in itertools.product(
         chunk_sizes,
         noise_percents,
         new_noises,
         window_sizes,
-        ulrealing_rates,
         random_seeds
     )
     if noise_percent != delta_noise
-]
+]"""
 
-print(f"Liczba uruchamianych eksperymentów: {len(param_grid)}")
+#print(f"Liczba uruchamianych eksperymentów: {len(param_grid)}")
 
-results = Parallel(n_jobs=-1, verbose=10)(
-    delayed(mlflow_run)(
-        chunk_size,
-        noise_percent,
-        delta_noise,
-        window_size,
-        random_seed,
-        ulrealing_rate,
-        metrics
+stream = DataStream(
+        chunk_size=chunk_size,
+        dataset_name="MNIST",
+        noise_percent=noise_percent,
+        delta_noise=new_noise,
+        random_seed=random_seed,
     )
-    for chunk_size, noise_percent, delta_noise, window_size, ulrealing_rate, random_seed in param_grid
-)
 
-df = pd.DataFrame(results)
-print(df.sort_values("accuracy", ascending=False).head())
+clf = FisherUnlearningAdam(window_size=window_size, unlearning_rate=ulr)
+evaluator = TestThenTrain(metrics=list(metrics.values()))
 
-"""drift_chunk = stream.noise_change_chunk
+X0, y0 = next(iter(stream))
+clf.partial_fit(X0, y0, classes=stream.classes_)
+
+evaluator.process(stream, clf)
+
+scores = evaluator.scores[0] # (metrics, time)
+train_times = np.array(clf.train_times_)
+memory = np.array(clf.memory_usage_)
+accuracy = scores[:,0]
+
+drift_chunk = stream.noise_change_chunk
 
 drift_chunk_eval = drift_chunk - 1
 
 max_chunk =  stream.n_chunks
+
+rolling_acc = (
+    pd.Series(accuracy)
+    .rolling(window=5, min_periods=1)
+    .mean()
+    .values
+)
 
 res1 = recovery_analysis(accuracy, rolling_acc, drift_chunk, max_chunk)
 
@@ -459,4 +463,4 @@ plt.ylabel("Rolling accuracy")
 plt.title("Accuracy over time for MNIST 0-9 + 5-9")
 plt.legend()
 plt.tight_layout()
-plt.show()"""
+plt.show()
