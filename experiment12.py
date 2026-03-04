@@ -349,7 +349,7 @@ metrics = {
     "specificity_macro": specificity_macro
 }
 
-mlflow.set_experiment("MNIST_SuddenDrift_WindowSize_Sliding")
+mlflow.set_experiment("MNIST_SuddenDrift_ChunkSize_Sliding")
 
 from joblib import Parallel, delayed
 import itertools
