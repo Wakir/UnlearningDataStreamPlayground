@@ -331,7 +331,7 @@ class DataStream:
         return self.chunk_id >= self.n_chunks - 1
     
 
-def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_seed, overlap_chunk, metrics):
+def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_seed, overlap_chunk, unlearning_rate, metrics):
     stream = DataStream(
         chunk_size=chunk_size,
         dataset_name="MNIST",
@@ -341,7 +341,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
         random_seed=random_seed,
     )
 
-    clf = SlidingWindowPerceptron(window_size=window_size)
+    clf = FisherUnlearningAdam(window_size=window_size, unlearning_rate = unlearning_rate)
     evaluator = TestThenTrain(metrics=list(metrics.values()))
 
     X0, y0 = next(iter(stream))
@@ -367,7 +367,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
 
 import mlflow
 
-def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, overlap_chunk, metrics):
+def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, overlap_chunk, unlearning_rate, metrics):
     with mlflow.start_run(nested=True):
 
         mlflow.log_params({
@@ -376,6 +376,7 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             "delta_noise": delta_noise,
             "window_size": window_size,
             "overlap_chunk": overlap_chunk,
+            "unlearning_rate": unlearning_rate,
             "random_seed": random_seed
         })
 
@@ -386,6 +387,7 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             window_size,
             random_seed,
             overlap_chunk,
+            unlearning_rate,
             metrics
         )
 
@@ -438,12 +440,14 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
 from joblib import Parallel, delayed
 import itertools
 
+
 chunk_sizes = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
 noise_percents = [0.0, 0.25, 0.5, 0.75, 1.0]
 new_noises = [0.0, 0.25, 0.5, 0.75, 1.0]
 overlap_chunks = [3, 5, 7, 9]
 window_sizes = [20]
 random_seeds = [42, 65]
+unlearning_rates = [0.1]
 
 from functools import partial
 
@@ -457,18 +461,19 @@ metrics = {
     "specificity_macro": specificity_macro
 }
 
-mlflow.set_experiment("MNIST_GradualDrift_ChunkSize_Sliding")
+mlflow.set_experiment("MNIST_GradualDrift_WindowSize_Unlearning")
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
 param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, overlap_chunks, random_seed)
-    for chunk_size, noise_percent, delta_noise, window_size, overlap_chunks, random_seed
+    (chunk_size, noise_percent, delta_noise, window_size, overlap_chunks, unlearning_rates, random_seed)
+    for chunk_size, noise_percent, delta_noise, window_size, overlap_chunks, unlearning_rates, random_seed
     in itertools.product(
         chunk_sizes,
         noise_percents,
         new_noises,
         window_sizes,
         overlap_chunks,
+        unlearning_rates,
         random_seeds
     )
     if noise_percent != delta_noise
@@ -484,9 +489,10 @@ results = Parallel(n_jobs=-1, verbose=10)(
         window_size,
         random_seed,
         overlap_chunks,
+        unlearning_rates,
         metrics
     )
-    for chunk_size, noise_percent, delta_noise, window_size, overlap_chunks, random_seed in param_grid
+    for chunk_size, noise_percent, delta_noise, window_size, overlap_chunks, unlearning_rates, random_seed in param_grid
 )
 
 df = pd.DataFrame(results)

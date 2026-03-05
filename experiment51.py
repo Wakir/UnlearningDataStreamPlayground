@@ -439,11 +439,11 @@ from joblib import Parallel, delayed
 import itertools
 
 chunk_sizes = [100]
-noise_percents = [0.0, 0.2, 0.4, 0.6,  0.8, 1.0]
-new_noises = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-overlap_chunks = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+noise_percents = [0.0, 0.25, 0.5, 0.75, 1.0]
+new_noises = [0.0, 0.25, 0.5, 0.75, 1.0]
+overlap_chunks = [3, 5, 7, 9]
 window_sizes = [20, 40, 60, 80, 100]
-random_seeds = [42, 65, 88]
+random_seeds = [42, 65]
 
 from functools import partial
 
