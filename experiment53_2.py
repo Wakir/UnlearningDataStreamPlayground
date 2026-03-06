@@ -441,13 +441,13 @@ from joblib import Parallel, delayed
 import itertools
 
 
-chunk_sizes = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
+chunk_sizes = [100]
 noise_percents = [0.0, 0.25, 0.5, 0.75, 1.0]
 new_noises = [0.0, 0.25, 0.5, 0.75, 1.0]
 overlap_chunks = [3, 5, 7, 9]
 window_sizes = [20]
 random_seeds = [42, 65]
-unlearning_rates = [0.1]
+unlearning_rates = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
 
 from functools import partial
 
@@ -461,7 +461,7 @@ metrics = {
     "specificity_macro": specificity_macro
 }
 
-mlflow.set_experiment("MNIST_GradualDrift_ChunkSize_Unlearning")
+mlflow.set_experiment("MNIST_GradualDrift_UnlearningRates_Unlearning")
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
 param_grid = [
