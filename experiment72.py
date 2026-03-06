@@ -512,7 +512,8 @@ results = Parallel(n_jobs=-1, verbose=10)(
         target_noise,
         noise_step,
         window_size,
-        random_seed
+        random_seed,
+        metrics
     )
     for chunk_size, start_noise, target_noise, noise_step, window_size, random_seed in param_grid
 )
