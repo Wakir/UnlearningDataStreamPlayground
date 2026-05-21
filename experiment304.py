@@ -217,7 +217,7 @@ class DataStream:
             X_noisy[i] = flat.reshape(H, W, C)
 
         return np.clip(X_noisy, 0.0, 1.0)
-    
+
     def __iter__(self):
         self.reset()
         return self
@@ -230,7 +230,7 @@ class DataStream:
 
     def is_dry(self):
         return self.chunk_id >= self.n_chunks - 1
-    
+
 
 def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_seed, ulr, learning_rate, metrics, alghoritm):
     stream = DataStream(
@@ -242,9 +242,9 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
     )
 
     if alghoritm=="Sliding":
-        clf = SlidingWindowPerceptron(window_size=window_size, lr = learning_rate)
+        clf = SlidingWindowCNN(window_size=window_size, lr = learning_rate, epochs = ulr)
     elif alghoritm=="Unlearning":
-        clf = HessianResNetUnlearning(window_size=window_size, unlearning_rate = ulr, lr=learning_rate)
+        clf = HessianCNNUnlearning(window_size=window_size, unlearning_rate = ulr, lr=learning_rate)
     evaluator = TestThenTrain(metrics=list(metrics.values()))
 
     X0, y0 = next(iter(stream))
@@ -258,7 +258,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
 
     return {
         "metric_curves": {
-            name: scores[:, i]   
+            name: scores[:, i]
             for i, name in enumerate(metrics.keys())
         },
         "drift_chunk": stream.noise_change_chunk,
@@ -269,7 +269,7 @@ def run_experiment(chunk_size, noise_percent, delta_noise, window_size, random_s
 
 import mlflow
 
-def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, ulrealing_rate, learning_rate, metrics):
+def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed, epochs, learning_rate, metrics):
     with mlflow.start_run(nested=True):
 
         mlflow.log_params({
@@ -277,7 +277,7 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             "noise_percent": noise_percent,
             "delta_noise": delta_noise,
             "window_size": window_size,
-            "unlearning_rate": ulrealing_rate,
+            "epochs": epochs,
             "learning_rate": learning_rate,
             "random_seed": random_seed,
         })
@@ -288,10 +288,10 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
             delta_noise,
             window_size,
             random_seed,
-            ulrealing_rate,
+            epochs,
             learning_rate,
             metrics,
-            "Unlearning"
+            "Sliding"
         )
 
         curves = output["metric_curves"]
@@ -347,9 +347,7 @@ random_seeds = [42]
 learning_rates = [0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010,
                   0.0011, 0.0012, 0.0013, 0.0014, 0.0015, 0.0016, 0.0017, 0.0018, 0.0019, 0.0020, 
                   0.0021, 0.0022, 0.0023, 0.0024, 0.0025]
-unlearning_rates = [0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010,
-                  0.0011, 0.0012, 0.0013, 0.0014, 0.0015, 0.0016, 0.0017, 0.0018, 0.0019, 0.0020, 
-                  0.0021, 0.0022, 0.0023, 0.0024, 0.0025]
+epochs = [4, 8, 12, 16, 20]
 
 from functools import partial
 
@@ -359,44 +357,48 @@ metrics = {
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns301")
+MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns304")
 mlflow.set_tracking_uri(f"file://{MLRUNS_DIR}")
 
 mlflow.set_experiment("MNIST_SuddenDrift")
+
+import os
+import json
+import itertools
 
 from joblib import Parallel, delayed
 import itertools
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
 param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, unlearning_rate, learning_rates, random_seed,)
-    for chunk_size, noise_percent, delta_noise, window_size, unlearning_rate, learning_rates, random_seed,
+    (chunk_size, noise_percent, delta_noise, window_size, epochs, learning_rates, random_seed,)
+    for chunk_size, noise_percent, delta_noise, window_size, epochs, learning_rates, random_seed,
     in itertools.product(
         chunk_sizes,
         noise_percents,
         new_noises,
         window_sizes,
-        unlearning_rates,
+        epochs,
         learning_rates,
         random_seeds,
     )
     #if noise_percent != delta_noise
 ]
 
-print(f"Number of experiments: {len(param_grid)}")
+print(f"Liczba uruchamianych eksperymentów: {len(param_grid)}")
 
-results = Parallel(n_jobs=8, verbose=10)(
+results = Parallel(n_jobs=-1, verbose=10)(
     delayed(mlflow_run)(
         chunk_size,
         noise_percent,
         delta_noise,
         window_size,
         random_seed,
-        ulrealing_rate,
+        epochs,
         learning_rates,
         metrics,
     )
-    for chunk_size, noise_percent, delta_noise, window_size, ulrealing_rate, learning_rates, random_seed in param_grid
+    for chunk_size, noise_percent, delta_noise, window_size, epochs, learning_rates, random_seed in param_grid
 )
 
 df = pd.DataFrame(results)

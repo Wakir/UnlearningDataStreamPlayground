@@ -102,9 +102,9 @@ class HessianCNNUnlearning(BaseEstimator, ClassifierMixin):
         window_size=5,
         unlearning_rate=1.0,
         lr=0.01,
-        cg_iters=10,
+        cg_iters=1,
         damping=0.01,
-        epochs = 10,
+        epochs = 15,
         device=None,
     ):
 

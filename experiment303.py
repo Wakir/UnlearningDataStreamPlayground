@@ -343,7 +343,7 @@ chunk_sizes = [200]
 noise_percents = [0.0]
 new_noises = [0.0]
 window_sizes = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
-random_seeds = [42]
+random_seeds = [88]
 learning_rates = [0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010,
                   0.0011, 0.0012, 0.0013, 0.0014, 0.0015, 0.0016, 0.0017, 0.0018, 0.0019, 0.0020, 
                   0.0021, 0.0022, 0.0023, 0.0024, 0.0025]
@@ -359,7 +359,7 @@ metrics = {
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns301")
+MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns303")
 mlflow.set_tracking_uri(f"file://{MLRUNS_DIR}")
 
 mlflow.set_experiment("MNIST_SuddenDrift")
