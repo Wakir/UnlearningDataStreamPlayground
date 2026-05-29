@@ -1,59 +1,24 @@
 import numpy as np
 import time
+from torch.utils.data import TensorDataset, DataLoader
 from collections import deque
 
 from sklearn.base import BaseEstimator, ClassifierMixin
+from torchvision.models import resnet18
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchvision.models as models
 
 
 # ======================================================
-# Residual Block (MLP-style)
-# ======================================================
-class ResidualBlock(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.fc1 = nn.Linear(dim, dim)
-        self.fc2 = nn.Linear(dim, dim)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        identity = x
-        out = self.relu(self.fc1(x))
-        out = self.fc2(out)
-        out = out + identity
-        return self.relu(out)
-
-
-# ======================================================
-# ResNet-like classifier (dla danych wektorowych)
-# ======================================================
-class ResNetClassifier(nn.Module):
-    def __init__(self, input_dim, num_classes):
-        super().__init__()
-
-        self.fc_in = nn.Linear(input_dim, 128)
-
-        self.blocks = nn.Sequential(
-            ResidualBlock(128),
-            ResidualBlock(128)
-        )
-
-        self.fc_out = nn.Linear(128, num_classes)
-
-    def forward(self, x):
-        x = self.fc_in(x)
-        x = self.blocks(x)
-        return self.fc_out(x)
-
-
-# ======================================================
-# Sliding Window ResNet (uniwersalny)
+# Sliding Window ResNet
 # ======================================================
 class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
+
     def __init__(self, window_size=5, lr=1e-3, epochs=10):
+
         self.window_size = window_size
         self.lr = lr
         self.epochs = epochs
@@ -63,118 +28,197 @@ class SlidingWindowPerceptron(BaseEstimator, ClassifierMixin):
 
         self.train_times_ = []
         self.memory_usage_ = []
+
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+        self.model = resnet18(num_classes=10).to(self.device)
 
-    # --------------------------------------------------
-    # Uniwersalne przygotowanie danych
-    # --------------------------------------------------
-    def _prepare_X(self, X):
-        X = np.asarray(X)
-        if X.ndim > 2:
-            X = X.reshape(X.shape[0], -1)
-        return X
+        self.loss_fn = nn.CrossEntropyLoss()
 
-    # --------------------------------------------------
-    # Inicjalizacja / reset modelu
-    # --------------------------------------------------
-    def _init_model(self, input_dim):
-        self.model = ResNetClassifier(
-            input_dim=input_dim,
-            num_classes=len(self.classes_)
-        ).to(self.device)
-        self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+        self.optimizer = optim.SGD(
+            self.model.parameters(),
+            lr=self.lr
+        )
+
         self._is_initialized = True
-        self.input_dim_ = input_dim
+
+        self.buffer = deque(maxlen=window_size)
+
+        self.k = 0
+
+        self.classes_ = None
+
+        self.train_times_ = []
+        self.memory_usage_ = []
+
+    def _init_model(self):
+
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+        self.model = resnet18(num_classes=10).to(self.device)
+
+        self.loss_fn = nn.CrossEntropyLoss()
+
+        self.optimizer = optim.SGD(
+            self.model.parameters(),
+            lr=self.lr
+        )
+
+        self._is_initialized = True
+    
+    def _track_memory_usage(self):
+
+        mem = 0
+
+        for p in self.model.parameters():
+            mem += p.nelement() * p.element_size()
+
+            if p.grad is not None:
+                mem += p.grad.nelement() * p.grad.element_size()
+
+        if hasattr(self, "buffer_"):
+            mem += sum(c[0].nbytes + c[1].nbytes for c in self.buffer_)
+
+        if torch.cuda.is_available():
+            mem += torch.cuda.memory_allocated(self.device)
+
+        self.memory_usage_.append(mem)
+
 
     # --------------------------------------------------
-    # Trening jednego chunka
+    # DATA PREP (MNIST -> tensor)
     # --------------------------------------------------
-    def _train(self, X, y):
-        X = self._prepare_X(X)
+    def _prepare_input(self, X):
 
-        # jeśli zmienił się wymiar cech → reset
-        if self._is_initialized and X.shape[1] != self.input_dim_:
-            print("RESET")
-            self._init_model(X.shape[1])
+        if isinstance(X, np.ndarray):
 
-        X = torch.from_numpy(X).float().to(self.device)
-        y = torch.from_numpy(y).long().to(self.device)
-        self.model.train()
-        for _ in range(self.epochs):
-            self.optimizer.zero_grad()
-            logits = self.model(X)
-            loss = self.criterion(logits, y)
-            loss.backward()
-            self.optimizer.step()
-    def _reset_optimizer(self):
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+            # NHWC -> NCHW
+            if X.ndim == 4:
+                X = np.transpose(X, (0, 3, 1, 2))
+
+            if X.shape[1] == 1:
+                X = np.repeat(X, 3, axis=1)
+
+            if X.ndim == 2 and X.shape[1] == 784:
+                X = X.reshape(-1, 1, 28, 28)
+                X = np.repeat(X, 3, axis=1)
+
+        X = torch.tensor(X).float().to(self.device)
+
+        return X
+    
+    def _prepare_target(self, y):
+
+        return torch.tensor(y).long().to(self.device)
 
     # --------------------------------------------------
-    # partial_fit (sliding window)
+    # DATA CHUNK TRAIN
+    # --------------------------------------------------
+
+    def _train(self, X, y, epochs):
+
+        X = self._prepare_input(X)
+        y = self._prepare_target(y)
+
+        dataset = TensorDataset(X, y)
+
+        loader = DataLoader(
+            dataset,
+            batch_size=64,
+            shuffle=True
+        )
+
+        for _ in range(epochs):
+            for xb, yb in loader:
+
+                self.optimizer.zero_grad()
+
+                out = self.model(xb)
+
+                loss = self.loss_fn(out, yb)
+
+                loss.backward()
+
+                self.optimizer.step()
+
+    # --------------------------------------------------
+    # partial_fit (Sliding Window)
     # --------------------------------------------------
     def partial_fit(self, X, y, classes=None):
+
         if not hasattr(self, "buffer_"):
             self.buffer_ = deque(maxlen=self.window_size)
             self.k_ = 0
+
             if classes is not None:
                 self.classes_ = classes
-
+        print(self.k_)    
         t_start = time.perf_counter()
 
-        self.buffer_.append((X, y))
-
-        mem = sum(c[0].nbytes + c[1].nbytes for c in self.buffer_)
-        self.memory_usage_.append(mem)
-
-        Xp = self._prepare_X(X)
-
         if not self._is_initialized:
-            self._init_model(Xp.shape[1])
+            self._init_model()
 
         # ==================================================
-        # k < L → inkrementalnie
+        # k < L → inremental training
         # ==================================================
         if self.k_ < self.window_size:
-            self._train(X, y)
+
+            self._train(X, y, self.epochs)
+            self.buffer_.append((X, y))
 
         # ==================================================
-        # k ≥ L → RESET + trening od zera na oknie
+        # k ≥ L → reset + training on whole window
         # ==================================================
         else:
-            Xw = np.vstack([self._prepare_X(c[0]) for c in self.buffer_])
+            self.buffer_.append((X, y))
+            Xw = np.vstack([c[0]for c in self.buffer_])
             yw = np.hstack([c[1] for c in self.buffer_])
 
-            self._init_model(Xw.shape[1])
-            self._train(Xw, yw)
+            self._init_model()
+
+            self._train(Xw, yw, self.epochs)
 
         t_end = time.perf_counter()
+
         self.train_times_.append(t_end - t_start)
 
+        self._track_memory_usage()
+
         self.k_ += 1
+
         return self
 
-    # --------------------------------------------------
-    # Predykcja
-    # --------------------------------------------------
+    ####################################################################
+    # PREDICT
+    ####################################################################
     def predict(self, X):
-        if not self._is_initialized:
-            return np.random.choice(self.classes_, size=len(X))
 
-        X = self._prepare_X(X)
-
-        # zabezpieczenie
-        if X.shape[1] != self.input_dim_:
-            raise ValueError(
-                f"Niezgodny wymiar cech: {X.shape[1]} ≠ {self.input_dim_}"
-            )
-
-        X = torch.from_numpy(X).float().to(self.device)
+        X = self._prepare_input(X)
 
         self.model.eval()
-        with torch.no_grad():
-            logits = self.model(X)
 
-        return logits.argmax(dim=1).cpu().numpy()
+        with torch.no_grad():
+
+            out = self.model(X)
+
+        return out.argmax(dim=1).cpu().numpy()
+    
+    ####################################################################
+    # OPTIONAL predict_proba
+    ####################################################################
+
+    def predict_proba(self, X):
+
+        X = self._prepare_input(X)
+
+        self.model.eval()
+
+        with torch.no_grad():
+
+            out = self.model(X)
+
+            probs = torch.softmax(out, dim=1)
+
+        return probs.cpu().numpy()

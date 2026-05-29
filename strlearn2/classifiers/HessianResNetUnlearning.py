@@ -5,6 +5,7 @@ from collections import deque
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
 
 from torchvision.models import resnet18
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -17,7 +18,7 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
         window_size=5,
         unlearning_rate=1.0,
         lr=0.01,
-        cg_iters=5,
+        cg_iters=1,
         damping=0.01,
         epochs = 5,
         device=None,
@@ -51,6 +52,29 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
 
         self.train_times_ = []
         self.memory_usage_ = []
+    
+    ####################################################################
+    # MEMORY USAGE
+    ####################################################################
+
+    def _get_memory_usage(self):
+
+        memory = 0
+
+        # pamięć parametrów modelu
+        for p in self.model.parameters():
+            memory += p.nelement() * p.element_size()
+
+        # pamięć gradientów (jeśli istnieją)
+        for p in self.model.parameters():
+            if p.grad is not None:
+                memory += p.grad.nelement() * p.grad.element_size()
+
+        # GPU memory (jeśli używany CUDA)
+        if torch.cuda.is_available():
+            memory += torch.cuda.memory_allocated(self.device)
+
+        return memory
 
 
     ####################################################################
@@ -100,17 +124,26 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
         X = self._prepare_input(X)
         y = self._prepare_target(y)
 
+        dataset = TensorDataset(X, y)
+
+        loader = DataLoader(
+            dataset,
+            batch_size=64,
+            shuffle=True
+        )
+
         for _ in range(epochs):
+            for xb, yb in loader:
 
-            self.optimizer.zero_grad()
+                self.optimizer.zero_grad()
 
-            out = self.model(X)
+                out = self.model(xb)
 
-            loss = self.loss_fn(out, y)
+                loss = self.loss_fn(out, yb)
 
-            loss.backward()
+                loss.backward()
 
-            self.optimizer.step()
+                self.optimizer.step()
 
 
     ####################################################################
@@ -145,7 +178,17 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
     # K2 Hessian Vector Product
     ####################################################################
 
-    def hessian_vector_product(self, grad_vec, params, v):
+    def hessian_vector_product(self, loss, params, v):
+
+        grads = torch.autograd.grad(
+            loss,
+            params,
+            create_graph=True
+        )
+
+        grad_vec = torch.cat(
+            [g.reshape(-1) for g in grads]
+        )
 
         gv = torch.dot(grad_vec, v)
 
@@ -155,9 +198,13 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
             retain_graph=True
         )
 
-        Hv_vec = torch.cat([h.reshape(-1) for h in Hv])
+        Hv_vec = torch.cat(
+            [h.reshape(-1) for h in Hv]
+        )
 
-        return Hv_vec + self.damping * v
+        Hv_vec += self.damping * v
+
+        return Hv_vec
 
 
     ####################################################################
@@ -205,7 +252,7 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
 
             upd = delta[pointer:pointer + numel].view(param.shape)
 
-            param.data -= self.unlearning_rate * self.lr * upd
+            param.data -= self.unlearning_rate * upd
 
             pointer += numel
 
@@ -226,12 +273,9 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
         loss = self.loss_fn(out, y)
 
         params = list(self.model.parameters())
-        grads = torch.autograd.grad(loss, params, create_graph=True)
-
-        grad_vec = torch.cat([g.reshape(-1) for g in grads])
 
         def Av(v):
-            return self.hessian_vector_product(grad_vec, params, v)
+            return self.hessian_vector_product(loss, params, v)
 
         v = self.conjugate_gradient(Av, g)
 
@@ -244,6 +288,7 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
 
     def partial_fit(self, X, y, classes=None):
 
+        print(self.k)
         t0 = time.perf_counter()
 
         if self.classes_ is None and classes is not None:
@@ -267,12 +312,7 @@ class HessianResNetUnlearning(BaseEstimator, ClassifierMixin):
 
         self.train_times_.append(time.perf_counter() - t0)
 
-        self.memory_usage_.append(
-            sum(
-                gf[0].nbytes + gf[1].nbytes
-                for gf in self.buffer
-            )
-        )
+        self.memory_usage_.append(self._get_memory_usage())
 
         self.k += 1
 
