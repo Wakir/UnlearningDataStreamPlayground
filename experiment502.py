@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import os
+import json
 from tensorflow.keras.datasets import mnist, cifar10
 from strlearn.evaluators import TestThenTrain
 from sklearn.metrics import accuracy_score
@@ -373,24 +374,12 @@ from joblib import Parallel, delayed
 import itertools
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
-param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, unlearning_rate, learning_rates, random_seed,)
-    for chunk_size, noise_percent, delta_noise, window_size, unlearning_rate, learning_rates, random_seed,
-    in itertools.product(
-        chunk_sizes,
-        noise_percents,
-        new_noises,
-        window_sizes,
-        unlearning_rates,
-        learning_rates,
-        random_seeds,
-    )
-    #if noise_percent != delta_noise
-]
+with open("missing_runsUN1.txt") as f:
+    param_grid = json.load(f)
 
 print(f"Number of experiments: {len(param_grid)}")
 
-results = Parallel(n_jobs=8, verbose=10)(
+results = Parallel(n_jobs=-1, verbose=10)(
     delayed(mlflow_run)(
         chunk_size,
         noise_percent,

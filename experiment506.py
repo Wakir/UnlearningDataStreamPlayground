@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import os
+import json
 from tensorflow.keras.datasets import mnist, cifar10
 from strlearn.evaluators import TestThenTrain
 from sklearn.metrics import accuracy_score
@@ -340,8 +341,8 @@ def mlflow_run(chunk_size, noise_percent, delta_noise, window_size, random_seed,
 # HIPERPARAMETERS
 
 chunk_sizes = [200]
-noise_percents = [0.0]
-new_noises = [0.5]
+noise_percents = [0.5]
+new_noises = [0.0]
 window_sizes = [24, 28, 32, 36, 40]
 random_seeds = [88]
 learning_rates = [0.0001, 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009, 0.0010,
@@ -364,7 +365,7 @@ metrics = {
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns506")
+MLRUNS_DIR = os.path.join(BASE_DIR, "mlruns518")
 mlflow.set_tracking_uri(f"file://{MLRUNS_DIR}")
 
 mlflow.set_experiment("MNIST_SuddenDrift")
@@ -373,24 +374,11 @@ from joblib import Parallel, delayed
 import itertools
 
 # 🔽 GENEROWANIE TYLKO POPRAWNYCH KOMBINACJI
-param_grid = [
-    (chunk_size, noise_percent, delta_noise, window_size, unlearning_rate, learning_rates, random_seed,)
-    for chunk_size, noise_percent, delta_noise, window_size, unlearning_rate, learning_rates, random_seed,
-    in itertools.product(
-        chunk_sizes,
-        noise_percents,
-        new_noises,
-        window_sizes,
-        unlearning_rates,
-        learning_rates,
-        random_seeds,
-    )
-    #if noise_percent != delta_noise
-]
-
+with open("missing_runsUN5.txt") as f:
+    param_grid = json.load(f)
 print(f"Number of experiments: {len(param_grid)}")
 
-results = Parallel(n_jobs=8, verbose=10)(
+results = Parallel(n_jobs=-1, verbose=10)(
     delayed(mlflow_run)(
         chunk_size,
         noise_percent,
